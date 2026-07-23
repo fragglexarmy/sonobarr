@@ -56,6 +56,25 @@ def _resolve_oidc_username(user_info):
     return user_info.get("email") or user_info.get("preferred_username")
 
 
+def _fetch_user_info(token):
+    """
+    Return user info claims for the given token.
+
+    Most providers embed claims directly in the ID token, but some (e.g. Authelia)
+    intentionally keep the ID token minimal and expose profile claims only via the
+    UserInfo endpoint. If the identity claims we need are absent, fetch them
+    explicitly and merge so both paths work transparently.
+    """
+    user_info = token.get("userinfo") or {}
+    if not user_info.get("email") and not user_info.get("preferred_username"):
+        try:
+            fetched = oidc.sonobarr.userinfo(token=token)
+            user_info = {**user_info, **fetched}
+        except Exception as e:
+            current_app.logger.warning("OIDC UserInfo endpoint fetch failed: %s", e)
+    return user_info or None
+
+
 def _create_oidc_user(oidc_user_id: str, username: str, user_info, is_admin_via_group: bool) -> User:
     """Create and persist a new OIDC-backed user account."""
     user = User(
@@ -108,7 +127,7 @@ def callback():
     except Exception as e:
         return _redirect_to_auth_login(f"OIDC authorization failed: {e}")
 
-    user_info = token.get('userinfo')
+    user_info = _fetch_user_info(token)
     if not user_info:
         return _redirect_to_auth_login("Failed to get user info from OIDC provider.")
 
