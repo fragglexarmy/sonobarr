@@ -33,7 +33,7 @@
               <label for="lastfm_username" class="form-label">Last.fm username</label>
               <input type="text" class="form-control" id="lastfm_username" name="lastfm_username"
                      value="{{ current_user.lastfm_username or '' }}" placeholder="e.g., yourlastfmhandle">
-              <div class="form-text">Optional. Used to pull personal recommendations while keeping the global API key.</div>
+              <div class="form-text">Optional. Used to pull personal recommendations with your API keys or the global defaults.</div>
               <div class="form-text">We use your public Last.fm profile to approximate recommendations. Linking is not required.</div>
             </div>
             <div class="mb-3">
@@ -43,7 +43,6 @@
               <div class="form-text">Optional. Enables ListenBrainz weekly exploration picks in personal discovery.</div>
               <div class="form-text">We only read public playlist data; nothing is posted back to ListenBrainz.</div>
             </div>
-            {% if not current_user.oidc_id %}
             <hr>
             <p class="fw-semibold">External API Keys (optional)</p>
             <p class="text-muted small">Override global API keys with your own. Leave blank to use the admin's global keys.</p>
@@ -81,6 +80,8 @@
             </div>
             <div class="alert alert-info py-2 px-3 small">
               <strong>Note:</strong> If you provide your own LLM API key, make sure to also set the correct Base URL below.
+              A personal Base URL uses only your key and extra headers; global credentials are never sent to it.
+              Leave your key blank only for endpoints that do not require one.
               Local/private URLs will only work if the app is hosted on the same network.
             </div>
             <div class="mb-3">
@@ -104,6 +105,7 @@
               >{{ current_user.openai_extra_headers or '' }}</textarea>
             </div>
             <hr>
+            {% if not current_user.oidc_id %}
             <p class="fw-semibold">Change password</p>
             <div class="mb-3">
               <label for="current_password" class="form-label">Current password</label>

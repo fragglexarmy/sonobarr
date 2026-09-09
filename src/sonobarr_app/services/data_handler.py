@@ -406,21 +406,29 @@ class DataHandler:
         """
         Get an OpenAI recommender configured for the user.
         Uses user's API keys if set, otherwise falls back to global config.
-        Returns None if no API key is available.
+        Personal endpoints use only personal credentials, or a keyless client.
         """
-        user_has_custom_keys = user and (
-            getattr(user, 'openai_api_key', None) or
-            getattr(user, 'openai_api_base', None)
+        override_fields = (
+            "openai_api_key", "openai_api_base", "openai_model",
+            "openai_extra_headers", "openai_max_seed_artists",
         )
-
-        # If user has no custom keys, fall back to the global recommender directly
-        if not user_has_custom_keys and self.openai_recommender:
+        has_overrides = user and any(
+            getattr(user, field, None) not in (None, "") for field in override_fields
+        )
+        if not has_overrides and self.openai_recommender:
             return self.openai_recommender
 
-        api_key = (self.get_openai_api_key(user) or "").strip()
-        base_url = (self.get_openai_api_base(user) or "").strip()
+        personal_base = (getattr(user, "openai_api_base", None) or "").strip()
+        base_url = personal_base or (self.openai_api_base or "").strip()
+        # A personal destination must never receive server-owned credentials,
+        # including secrets in global headers or OPENAI_API_KEY.
+        if personal_base:
+            api_key = (getattr(user, "openai_api_key", None) or "").strip()
+            headers_raw = getattr(user, "openai_extra_headers", None)
+        else:
+            api_key = (self.get_openai_api_key(user) or "").strip()
+            headers_raw = self.get_openai_extra_headers(user)
         env_api_key = os.environ.get("OPENAI_API_KEY", "").strip()
-
         if not any([api_key, base_url, env_api_key]):
             return None
 
@@ -435,7 +443,6 @@ class DataHandler:
             max_seeds_int = DEFAULT_MAX_SEED_ARTISTS
 
         # Parse extra headers
-        headers_raw = self.get_openai_extra_headers(user)
         headers_override = {}
         if headers_raw:
             try:
@@ -465,8 +472,8 @@ class DataHandler:
 
         user = self._resolve_user(session.user_id)
 
-        user_has_lastfm_keys = bool(user and getattr(user, 'lastfm_api_key', None) and getattr(user, 'lastfm_api_secret', None))
-        lastfm_service_ready = self.last_fm_user_service is not None or user_has_lastfm_keys
+        effective_lastfm_keys = bool(self.get_lastfm_api_key(user) and self.get_lastfm_api_secret(user))
+        lastfm_service_ready = self.last_fm_user_service is not None or effective_lastfm_keys
         lastfm_username = user.lastfm_username if user else None
         lastfm_enabled = bool(lastfm_service_ready and lastfm_username)
         if not lastfm_service_ready:
@@ -839,8 +846,11 @@ class DataHandler:
 
     def _fetch_lastfm_personal_artists(self, username: str, user=None) -> List[str]:
         service = self.last_fm_user_service
-        if service is None and user and getattr(user, 'lastfm_api_key', None) and getattr(user, 'lastfm_api_secret', None):
-            service = LastFmUserService(user.lastfm_api_key, user.lastfm_api_secret)
+        if user and (getattr(user, 'lastfm_api_key', None) or getattr(user, 'lastfm_api_secret', None)):
+            key = self.get_lastfm_api_key(user)
+            secret = self.get_lastfm_api_secret(user)
+            if key and secret:
+                service = LastFmUserService(key, secret)
         if not service:
             return []
         recommendations = service.get_recommended_artists(username, limit=50)
@@ -987,14 +997,16 @@ class DataHandler:
             )
             return
 
-        # Allow BYO Last.fm keys to substitute for missing global service
-        if source_key == "lastfm" and not config["service_ready"]:
-            user_has_lastfm = bool(
-                getattr(user, 'lastfm_api_key', None) and getattr(user, 'lastfm_api_secret', None)
+        if source_key == "lastfm" and (
+            getattr(user, "lastfm_api_key", None) or getattr(user, "lastfm_api_secret", None)
+        ):
+            config = dict(
+                config,
+                service_ready=bool(self.last_fm_user_service or (
+                    self.get_lastfm_api_key(user) and self.get_lastfm_api_secret(user)
+                )),
+                fetch=lambda username: self._fetch_lastfm_personal_artists(username, user),
             )
-            if user_has_lastfm:
-                config = dict(config, service_ready=True,
-                              fetch=lambda uname: self._fetch_lastfm_personal_artists(uname, user))
 
         if not config["service_ready"]:
             self._emit_personal_error(
