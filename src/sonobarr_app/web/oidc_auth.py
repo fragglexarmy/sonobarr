@@ -65,15 +65,22 @@ def _fetch_user_info(token):
     UserInfo endpoint. If the identity claims we need are absent, fetch them
     explicitly and merge so both paths work transparently.
     """
+    # Authlib has validated these ID-token claims during the token exchange.
     user_info = token.get("userinfo") or {}
+    subject = user_info.get("sub")
+    if not isinstance(subject, str) or not subject:
+        return None
     if not user_info.get("email") and not user_info.get("preferred_username"):
         try:
             fetched = oidc.sonobarr.userinfo(token=token)
-            user_info = {**user_info, **fetched}
-        except Exception as e:
-            current_app.logger.warning("OIDC UserInfo endpoint fetch failed: %s", e)
-    return user_info or None
-
+        except Exception as exc:
+            current_app.logger.warning("OIDC UserInfo endpoint fetch failed: %s", exc)
+            return None
+        if not isinstance(fetched, dict) or fetched.get("sub") != subject:
+            current_app.logger.warning("OIDC UserInfo subject is missing or does not match the ID token")
+            return None
+        user_info = {**user_info, **fetched}
+    return user_info
 
 def _create_oidc_user(oidc_user_id: str, username: str, user_info, is_admin_via_group: bool) -> User:
     """Create and persist a new OIDC-backed user account."""

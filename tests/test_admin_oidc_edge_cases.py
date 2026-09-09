@@ -243,7 +243,8 @@ def test_oidc_login_logout_and_callback_edge_branches(app, client, monkeypatch):
         assert str(login_response).startswith("redirect:")
 
     oidc_auth.oidc.sonobarr = SimpleNamespace(
-        authorize_access_token=lambda: {"userinfo": {"sub": "missing-username"}}
+        authorize_access_token=lambda: {"userinfo": {"sub": "missing-username"}},
+        userinfo=lambda **kwargs: {"sub": "missing-username"},
     )
     with app.test_request_context("/oidc/callback"):
         response = oidc_auth.callback()
@@ -252,7 +253,8 @@ def test_oidc_login_logout_and_callback_edge_branches(app, client, monkeypatch):
 
     app.config["OIDC_ADMIN_GROUP"] = "admins"
     oidc_auth.oidc.sonobarr = SimpleNamespace(
-        authorize_access_token=lambda: {"userinfo": {"sub": "oidc-sub", "groups": []}}
+        authorize_access_token=lambda: {"userinfo": {"sub": "oidc-sub", "groups": []}},
+        userinfo=lambda **kwargs: {"sub": "oidc-sub", "email": "oidc-existing"},
     )
     with app.test_request_context("/oidc/callback"):
         response = oidc_auth.callback()
