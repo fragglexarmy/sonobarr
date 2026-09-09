@@ -4,12 +4,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.12.2] - 2026-03-03
+## [0.13.0] - 2026-09-09
 ### Added
+- Optional per-user Last.fm, YouTube, and LLM API settings in Profile for both password and OIDC accounts, with global defaults when personal settings are absent.
+- Per-user LLM model, extra headers, and seed limit overrides, plus support for personal keyless LLM endpoints.
 - Automated pytest suite for core services, web/API routes, OIDC flows, and socket handlers.
 - Coverage tooling configuration (`pytest.ini`) and coverage report generation (`coverage.xml`) workflow documentation.
 
+### Fixed
+- OIDC login for providers that supply email or username at the UserInfo endpoint instead of in the ID token, while preserving support for embedded profile claims.
+
+### Security
+- Validate fetched UserInfo subjects against the authenticated ID-token subject before accepting profile claims.
+- Keep global LLM credentials and authentication headers isolated from user-configured LLM endpoints.
+
 ### Changed
+- Add a database migration for personal API settings; existing users retain global defaults until they configure overrides.
 - Complete code refactor to comply with several Sonarqube reports (Security hotspots, maintainability and reliability).
 - Updated README and technical docs to reflect automated testing and coverage workflow.
 
